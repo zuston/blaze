@@ -21,11 +21,12 @@ use std::{
 };
 
 use blaze_jni_bridge::{
-    is_jni_bridge_inited, jni_bridge::LocalRef, jni_call, jni_call_static, jni_get_string,
-    jni_new_direct_byte_buffer, jni_new_global_ref,
+    conf, conf::StringConf, is_jni_bridge_inited, jni_bridge::LocalRef, jni_call, jni_call_static,
+    jni_get_string, jni_new_direct_byte_buffer, jni_new_global_ref,
 };
 use datafusion::{common::Result, parquet::file::reader::Length, physical_plan::metrics::Time};
 use jni::{objects::GlobalRef, sys::jlong};
+use once_cell::sync::OnceCell;
 
 use crate::{
     common::ipc_compression::{IoCompressionReader, IoCompressionWriter},
@@ -42,11 +43,13 @@ pub trait Spill: Send + Sync {
     fn get_buf_writer<'a>(&'a mut self) -> BufWriter<Box<dyn Write + Send + 'a>>;
 
     fn get_compressed_reader(&self) -> SpillCompressedReader<'_> {
-        IoCompressionReader::new_with_configured_codec(self.get_buf_reader())
+        IoCompressionReader::try_new(spill_compression_codec(), self.get_buf_reader())
+            .expect("error creating compression reader")
     }
 
     fn get_compressed_writer(&mut self) -> SpillCompressedWriter<'_> {
-        IoCompressionWriter::new_with_configured_codec(self.get_buf_writer())
+        IoCompressionWriter::try_new(spill_compression_codec(), self.get_buf_writer())
+            .expect("error creating compression writer")
     }
 }
 
@@ -66,6 +69,20 @@ impl Spill for Vec<u8> {
     fn get_buf_writer<'a>(&'a mut self) -> BufWriter<Box<dyn Write + Send + 'a>> {
         BufWriter::new(Box::new(self))
     }
+}
+
+fn spill_compression_codec() -> &'static str {
+    static CODEC: OnceCell<String> = OnceCell::new();
+    CODEC
+        .get_or_try_init(|| {
+            if is_jni_bridge_inited() {
+                conf::SPILL_COMPRESSION_CODEC.value()
+            } else {
+                Ok(format!("lz4")) // for testing
+            }
+        })
+        .expect("error reading spark.blaze.spill.compression.codec")
+        .as_str()
 }
 
 pub fn try_new_spill(spill_metrics: &SpillMetrics) -> Result<Box<dyn Spill>> {

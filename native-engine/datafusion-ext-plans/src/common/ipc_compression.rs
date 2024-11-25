@@ -178,7 +178,7 @@ impl<W: Write> IoCompressionWriter<W> {
         Self::try_new(io_compression_codec(), inner).expect("error creating compression encoder")
     }
 
-    fn try_new(codec: &str, inner: W) -> Result<Self> {
+    pub fn try_new(codec: &str, inner: W) -> Result<Self> {
         match codec {
             "lz4" => Ok(Self::LZ4(lz4_flex::frame::FrameEncoder::new(inner))),
             "zstd" => Ok(Self::ZSTD(zstd::Encoder::new(inner, ZSTD_LEVEL)?)),
@@ -226,7 +226,7 @@ impl<R: Read> IoCompressionReader<R> {
         Self::try_new(io_compression_codec(), inner).expect("error creating compression encoder")
     }
 
-    fn try_new(codec: &str, inner: R) -> Result<Self> {
+    pub fn try_new(codec: &str, inner: R) -> Result<Self> {
         match codec {
             "lz4" => Ok(Self::LZ4(lz4_flex::frame::FrameDecoder::new(inner))),
             "zstd" => Ok(Self::ZSTD(zstd::Decoder::new(inner)?)),
