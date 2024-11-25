@@ -222,7 +222,7 @@ pub enum IoCompressionReader<R: Read> {
 }
 
 impl<R: Read> IoCompressionReader<R> {
-    pub fn new_with_configured_codec(inner: W) -> Self {
+    pub fn new_with_configured_codec(inner: R) -> Self {
         Self::try_new(io_compression_codec(), inner).expect("error creating compression encoder")
     }
 

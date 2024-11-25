@@ -26,14 +26,14 @@ use blaze_jni_bridge::{
 };
 use datafusion::{common::Result, parquet::file::reader::Length, physical_plan::metrics::Time};
 use jni::{objects::GlobalRef, sys::jlong};
-use crate::common::ipc_compression::{IoCompressionReader, IoCompressionWriter};
 
-use crate::memmgr::metrics::SpillMetrics;
+use crate::{
+    common::ipc_compression::{IoCompressionReader, IoCompressionWriter},
+    memmgr::metrics::SpillMetrics,
+};
 
-pub type SpillCompressedReader<'a> =
-    IoCompressionReader<BufReader<Box<dyn Read + Send + 'a>>>;
-pub type SpillCompressedWriter<'a> =
-    IoCompressionWriter<BufWriter<Box<dyn Write + Send + 'a>>>;
+pub type SpillCompressedReader<'a> = IoCompressionReader<BufReader<Box<dyn Read + Send + 'a>>>;
+pub type SpillCompressedWriter<'a> = IoCompressionWriter<BufWriter<Box<dyn Write + Send + 'a>>>;
 
 pub trait Spill: Send + Sync {
     fn as_any(&self) -> &dyn Any;
@@ -46,7 +46,7 @@ pub trait Spill: Send + Sync {
     }
 
     fn get_compressed_writer(&mut self) -> SpillCompressedWriter<'_> {
-        IoCompressionWriter::new_with_configured_codec(self.get_buf_writer()).auto_finish()
+        IoCompressionWriter::new_with_configured_codec(self.get_buf_writer())
     }
 }
 
