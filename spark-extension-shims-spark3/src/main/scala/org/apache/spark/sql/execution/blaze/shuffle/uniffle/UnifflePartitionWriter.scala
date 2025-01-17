@@ -15,4 +15,33 @@
  */
 package org.apache.spark.sql.execution.blaze.shuffle.uniffle
 
-class UnifflePartitionWriter {}
+import org.apache.spark.internal.Logging
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
+import org.apache.spark.shuffle.writer.WriteBufferManager
+import org.apache.spark.sql.execution.blaze.shuffle.RssPartitionWriterBase
+
+import java.nio.ByteBuffer
+
+class UnifflePartitionWriter(numPartitions: Int,
+                             metrics: ShuffleWriteMetricsReporter,
+                             bufferManager: WriteBufferManager) extends RssPartitionWriterBase with Logging {
+  private val mapStatusLengths: Array[Long] = Array.fill(numPartitions)(0L)
+
+  override def write(partitionId: Int, buffer: ByteBuffer): Unit = {
+    val numBytes = buffer.limit()
+    val bytes = new Array[Byte](numBytes)
+    buffer.get(bytes)
+    val bytesWritten = bytes.length
+    bufferManager.addPartitionData(partitionId, bytes)
+    metrics.incBytesWritten(bytesWritten)
+    mapStatusLengths(partitionId) += bytesWritten
+  }
+
+  override def flush(): Unit = {}
+
+  override def close(): Unit = {}
+
+  override def getPartitionLengthMap: Array[Long] = mapStatusLengths
+
+  override def stop(): Unit = {}
+}
