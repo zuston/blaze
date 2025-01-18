@@ -18,8 +18,9 @@ package org.apache.spark.sql.execution.blaze.shuffle.uniffle
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.ShuffleReadMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.shuffle.celeborn.CelebornShuffleHandle
-import org.apache.spark.shuffle.reader.RssShuffleDataIterator
+import org.apache.spark.shuffle.ShuffleReadMetricsReporter
+import org.apache.spark.shuffle.reader.{RssShuffleDataIterator, RssShuffleReader}
+import org.apache.spark.shuffle.uniffle.RssShuffleHandleWrapper
 import org.apache.spark.sql.execution.blaze.shuffle.BlazeRssShuffleReaderBase
 import org.apache.spark.storage.BlockId
 import org.apache.uniffle.client.api.ShuffleReadClient
@@ -29,8 +30,14 @@ import java.io.InputStream
 import java.nio.ByteBuffer
 
 class BlazeUniffleShuffleReader[K, C](
-    handle: CelebornShuffleHandle[K, _, C],
-    context: TaskContext)
+    reader: RssShuffleReader[K, C],
+    handle: RssShuffleHandleWrapper[K, _, C],
+    startMapIndex: Int,
+    endMapIndex: Int,
+    startPartition: Int,
+    endPartition: Int,
+    context: TaskContext,
+    metrics: ShuffleReadMetricsReporter)
     extends BlazeRssShuffleReaderBase[K, C](handle, context)
     with Logging {
 
@@ -38,10 +45,27 @@ class BlazeUniffleShuffleReader[K, C](
 }
 
 class UniffleInputStream(iterator: RssShuffleDataIterWrapper[_, _]) extends java.io.InputStream {
+  private var currentByteBuffer: ByteBuffer = null
 
-  override def read(): Int = ???
+  override def read(): Int = {
+    throw new UnsupportedOperationException("")
+  }
 
-  override protected def read(b: Array[Byte]): Int = ???
+  override protected def read(b: Array[Byte]): Int = {
+    if (currentByteBuffer == null) {
+      if (!iterator.hasNext) {
+        return 0
+      }
+      currentByteBuffer = iterator.next()._2.asInstanceOf[ByteBuffer]
+    }
+    if (currentByteBuffer.remaining() < b.length) {
+      throw new IllegalArgumentException(
+        s"ByteBuffer dont has enough data into the array buffer. actual: ${currentByteBuffer
+          .remaining()}, required: ${b.length}")
+    }
+    currentByteBuffer.get(b)
+    b.length
+  }
 }
 
 class RssShuffleDataIterWrapper[K, V](
@@ -50,5 +74,8 @@ class RssShuffleDataIterWrapper[K, V](
     rssConf: RssConf)
     extends RssShuffleDataIterator[K, V](null, readClient, shuffleReadMetrics, rssConf) {
 
-  override def createKVIterator(data: ByteBuffer): Iterator[Tuple2[AnyRef, AnyRef]] = ???
+  override def createKVIterator(data: ByteBuffer): Iterator[Tuple2[AnyRef, AnyRef]] = {
+    val element = Tuple2.apply(-1.asInstanceOf[AnyRef], data.asInstanceOf[AnyRef])
+    Iterator.single(element)
+  }
 }
