@@ -15,6 +15,7 @@
  */
 package org.apache.spark.sql.execution.blaze.shuffle.uniffle
 
+import com.thoughtworks.enableIf
 import org.apache.spark.shuffle.writer.RssShuffleWriter
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteMetricsReporter}
 import org.apache.spark.sql.execution.blaze.shuffle.{BlazeRssShuffleWriterBase, RssPartitionWriterBase}
@@ -32,5 +33,8 @@ class BlazeUniffleShuffleWriter[K, V, C](
     new UnifflePartitionWriter(mapId, numPartitions, metrics, rssShuffleWriter)
   }
 
-  override def getPartitionLengths(): Array[Long] = ???
+  @enableIf(
+    Seq("spark-3.2", "spark-3.3", "spark-3.4", "spark-3.5").contains(
+      System.getProperty("blaze.shim")))
+  override def getPartitionLengths(): Array[Long] = partitionLengths
 }
