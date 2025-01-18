@@ -15,7 +15,6 @@
  */
 package org.apache.spark.sql.execution.blaze.shuffle.uniffle
 
-import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.writer.RssShuffleWriter
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteMetricsReporter}
 import org.apache.spark.sql.execution.blaze.shuffle.{BlazeRssShuffleWriterBase, RssPartitionWriterBase}
@@ -30,10 +29,8 @@ class BlazeUniffleShuffleWriter[K, V, C](
       mapId: Int,
       metrics: ShuffleWriteMetricsReporter,
       numPartitions: Int): RssPartitionWriterBase = {
-    new UnifflePartitionWriter(numPartitions, metrics, rssShuffleWriter.getBufferManager)
+    new UnifflePartitionWriter(mapId, numPartitions, metrics, rssShuffleWriter)
   }
 
   override def getPartitionLengths(): Array[Long] = ???
-
-  override def stop(success: Boolean): Option[MapStatus] = ???
 }

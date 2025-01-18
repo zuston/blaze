@@ -15,33 +15,76 @@
  */
 package org.apache.spark.sql.execution.blaze.shuffle.uniffle
 
+import org.apache.commons.lang3.reflect.{FieldUtils, MethodUtils}
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
-import org.apache.spark.shuffle.writer.WriteBufferManager
+import org.apache.spark.shuffle.writer.RssShuffleWriter
 import org.apache.spark.sql.execution.blaze.shuffle.RssPartitionWriterBase
+import org.apache.uniffle.common.ShuffleBlockInfo
 
 import java.nio.ByteBuffer
 
-class UnifflePartitionWriter(numPartitions: Int,
-                             metrics: ShuffleWriteMetricsReporter,
-                             bufferManager: WriteBufferManager) extends RssPartitionWriterBase with Logging {
+class UnifflePartitionWriter[K, V, C](
+    mapId: Int,
+    numPartitions: Int,
+    metrics: ShuffleWriteMetricsReporter,
+    rssShuffleWriter: RssShuffleWriter[K, V, C])
+    extends RssPartitionWriterBase
+    with Logging {
   private val mapStatusLengths: Array[Long] = Array.fill(numPartitions)(0L)
+  private val rssShuffleWriterPushBlocksMethod = MethodUtils.getAccessibleMethod(
+    rssShuffleWriter.getClass,
+    "processShuffleBlockInfos",
+    classOf[java.util.List[ShuffleBlockInfo]])
+  private val rssShuffleWriterCheckAllBufferSpilledMethod =
+    MethodUtils.getAccessibleMethod(rssShuffleWriter.getClass, "checkAllBufferSpilled");
 
   override def write(partitionId: Int, buffer: ByteBuffer): Unit = {
     val numBytes = buffer.limit()
     val bytes = new Array[Byte](numBytes)
     buffer.get(bytes)
     val bytesWritten = bytes.length
-    bufferManager.addPartitionData(partitionId, bytes)
+
+    val bufferManager = rssShuffleWriter.getBufferManager
+    val shuffleBlockInfos = bufferManager.addPartitionData(partitionId, bytes)
+    if (shuffleBlockInfos != null && !shuffleBlockInfos.isEmpty) {
+      rssShuffleWriterPushBlocksMethod.invoke(rssShuffleWriter, shuffleBlockInfos)
+    }
+
     metrics.incBytesWritten(bytesWritten)
     mapStatusLengths(partitionId) += bytesWritten
   }
 
   override def flush(): Unit = {}
 
-  override def close(): Unit = {}
+  override def close(): Unit = {
+    // 1. wait all data pushed into the remote shuffle-server
+    val start = System.currentTimeMillis()
+    val bufferManager = rssShuffleWriter.getBufferManager
+    val restBlocks = bufferManager.clear()
+    if (restBlocks != null && !restBlocks.isEmpty) {
+      rssShuffleWriterPushBlocksMethod.invoke(rssShuffleWriter, restBlocks)
+    }
+    rssShuffleWriterCheckAllBufferSpilledMethod.invoke(rssShuffleWriter)
+    waitAndCheckBlocksSend()
+
+    val writtenDurationMs = bufferManager.getWriteTime + (System.currentTimeMillis() - start)
+    metrics.incWriteTime(writtenDurationMs)
+  }
+
+  private def waitAndCheckBlocksSend(): Unit = {
+    logInfo(s"waiting all blocks sending to the remote shuffle servers for mapId: $mapId")
+    val method = MethodUtils.getAccessibleMethod(
+      rssShuffleWriter.getClass,
+      "checkBlockSendResult",
+      classOf[java.util.HashSet[Long]])
+    val acceptedBlockIds = FieldUtils.getField(rssShuffleWriter.getClass, "blockIds")
+    method.invoke(rssShuffleWriter, acceptedBlockIds)
+  }
 
   override def getPartitionLengthMap: Array[Long] = mapStatusLengths
 
-  override def stop(): Unit = {}
+  override def stop(isSuccess: Boolean): Unit = {
+    rssShuffleWriter.stop(isSuccess)
+  }
 }
