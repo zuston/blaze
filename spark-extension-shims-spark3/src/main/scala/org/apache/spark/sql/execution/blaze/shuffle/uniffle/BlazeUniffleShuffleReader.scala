@@ -24,7 +24,7 @@ import org.apache.spark.shuffle.reader.{RssShuffleDataIterator, RssShuffleReader
 import org.apache.spark.shuffle.uniffle.RssShuffleHandleWrapper
 import org.apache.spark.sql.execution.blaze.shuffle.BlazeRssShuffleReaderBase
 import org.apache.spark.storage.BlockId
-import org.apache.spark.util.{CompletionIterator, TaskCompletionListener}
+import org.apache.spark.util.TaskCompletionListener
 import org.apache.spark.{ShuffleDependency, TaskContext}
 import org.apache.uniffle.client.api.ShuffleReadClient
 import org.apache.uniffle.client.factory.ShuffleClientFactory
@@ -65,7 +65,7 @@ class BlazeUniffleShuffleReader[K, C](
     FieldUtils.readField(reader.getClass, "mapEndIndex", true).asInstanceOf[Int]
   private val rssConf: RssConf =
     FieldUtils.readField(reader.getClass, "rssConf", true).asInstanceOf[RssConf]
-  private val shuffleDependency: ShuffleDependency[K, _, C] = FieldUtils
+  FieldUtils
     .readField(reader.getClass, "shuffleDependency", true)
     .asInstanceOf[ShuffleDependency[K, _, C]]
   private val appId: String =
@@ -94,11 +94,14 @@ class BlazeUniffleShuffleReader[K, C](
     readMetrics
   }
 
-  override protected def readBlocks(): Iterator[(BlockId, InputStream)] = ???
+  override protected def readBlocks(): Iterator[(BlockId, InputStream)] = {
+    val inputStream = new UniffleInputStream(new MultiPartitionIterator[K, C]())
+    Iterator.single((null, inputStream))
+  }
 
   class MultiPartitionIterator[K, C] extends AbstractIterator[Product2[K, C]] {
-    val iterators: util.List[CompletionIterator[Product2[K, C], RssShuffleDataIterator[K, C]]] =
-      new util.ArrayList[CompletionIterator[Product2[K, C], RssShuffleDataIterator[K, C]]]()
+    val iterators: util.List[RssShuffleDataIterator[K, C]] =
+      new util.ArrayList[RssShuffleDataIterator[K, C]]()
 
     if (numMaps > 0) {
       for (partition <- startPartition until endPartition) {
@@ -137,37 +140,34 @@ class BlazeUniffleShuffleReader[K, C](
               .rssConf(rssConf))
         val iterator: RssShuffleDataIterWrapper[K, C] =
           new RssShuffleDataIterWrapper[K, C](shuffleReadClient, readMetrics, rssConf)
-        val completionIterator = {
-          CompletionIterator.apply(
-            iterator,
-            () => {
-              context.taskMetrics.mergeShuffleReadMetrics()
-              iterator.cleanup
-            })
-        }
-        iterators.add(completionIterator)
+        iterators.add(iterator)
       }
-      iterator = iterators.iterator
+      iterator = iterators.iterator()
       if (iterator.hasNext) {
         dataIterator = iterator.next
         iterator.remove()
       }
       context.addTaskCompletionListener(new TaskCompletionListener {
         override def onTaskCompletion(context: TaskContext): Unit = {
-          if (dataIterator != null) dataIterator.completion()
-          iterator.forEachRemaining(x => x.completion())
+          context.taskMetrics.mergeShuffleReadMetrics()
+          if (dataIterator != null) {
+            dataIterator.cleanup()
+          }
+          while (iterator.hasNext) {
+            iterator.next().cleanup()
+          }
         }
       })
     }
 
-    var iterator
-        : util.Iterator[CompletionIterator[Product2[K, C], RssShuffleDataIterator[K, C]]] = null
-    var dataIterator: CompletionIterator[Product2[K, C], RssShuffleDataIterator[K, C]] = null
+    var iterator: util.Iterator[RssShuffleDataIterator[K, C]] = null
+    var dataIterator: RssShuffleDataIterator[K, C] = null
 
     override def hasNext: Boolean = try {
       if (dataIterator == null) return false
       while (!dataIterator.hasNext) {
         if (!iterator.hasNext) return false
+        dataIterator.cleanup()
         dataIterator = iterator.next
         iterator.remove()
       }
@@ -182,29 +182,33 @@ class BlazeUniffleShuffleReader[K, C](
       result
     }
   }
-}
 
-class UniffleInputStream(iterator: RssShuffleDataIterWrapper[_, _]) extends java.io.InputStream {
-  private var currentByteBuffer: ByteBuffer = null
+  class UniffleInputStream(iterator: MultiPartitionIterator[_, _]) extends java.io.InputStream {
+    private var currentByteBuffer: ByteBuffer = null
 
-  override def read(): Int = {
-    throw new UnsupportedOperationException("")
-  }
+    override def read(): Int = {
+      throw new UnsupportedOperationException("")
+    }
 
-  override protected def read(b: Array[Byte]): Int = {
-    if (currentByteBuffer == null) {
-      if (!iterator.hasNext) {
-        return 0
+    override protected def read(b: Array[Byte]): Int = {
+      if (currentByteBuffer == null) {
+        if (!iterator.hasNext) {
+          return 0
+        }
+        currentByteBuffer = iterator.next()._2.asInstanceOf[ByteBuffer]
+        if (currentByteBuffer == null) {
+          throw new RuntimeException(
+            "Gotten the empty byte buffer when retrieving from uniffle client")
+        }
       }
-      currentByteBuffer = iterator.next()._2.asInstanceOf[ByteBuffer]
+      if (currentByteBuffer.remaining() < b.length) {
+        throw new IllegalArgumentException(
+          s"ByteBuffer dont has enough data into the array buffer. actual: ${currentByteBuffer
+            .remaining()}, required: ${b.length}")
+      }
+      currentByteBuffer.get(b)
+      b.length
     }
-    if (currentByteBuffer.remaining() < b.length) {
-      throw new IllegalArgumentException(
-        s"ByteBuffer dont has enough data into the array buffer. actual: ${currentByteBuffer
-          .remaining()}, required: ${b.length}")
-    }
-    currentByteBuffer.get(b)
-    b.length
   }
 }
 
