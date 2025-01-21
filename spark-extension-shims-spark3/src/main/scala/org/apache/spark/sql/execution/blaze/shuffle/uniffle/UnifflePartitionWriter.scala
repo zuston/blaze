@@ -78,7 +78,7 @@ class UnifflePartitionWriter[K, V, C](
       rssShuffleWriter.getClass,
       "checkBlockSendResult",
       classOf[java.util.HashSet[Long]])
-    val acceptedBlockIds = FieldUtils.getField(rssShuffleWriter.getClass, "blockIds")
+    val acceptedBlockIds = FieldUtils.readField(rssShuffleWriter.getClass, "blockIds", true)
     method.invoke(rssShuffleWriter, acceptedBlockIds)
   }
 
