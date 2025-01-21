@@ -94,18 +94,17 @@ class BlazeUniffleShuffleReader[K, C](
   }
 
   class MultiPartitionIterator[K, C] extends AbstractIterator[Product2[K, C]] {
-    val iterators: util.List[RssShuffleDataIterator[K, C]] =
-      new util.ArrayList[RssShuffleDataIterator[K, C]]()
-
-    var iterator: util.Iterator[RssShuffleDataIterator[K, C]] = null
-    var dataIterator: RssShuffleDataIterator[K, C] = null
+    var iterators: util.Iterator[RssShuffleDataIterator[K, C]] = null
+    var currentIterator: RssShuffleDataIterator[K, C] = null
 
     if (numMaps > 0) {
+      val shuffleDataIterList: util.List[RssShuffleDataIterator[K, C]] =
+        new util.ArrayList[RssShuffleDataIterator[K, C]]()
+
       for (partition <- startPartition until endPartition) {
         if (partitionToExpectBlocks.get(partition).isEmpty) {
-//          logWarning(s"$partition partition is empty partition")
+          logInfo(s"partition=$partition's shuffle data is empty")
         } else {
-          logWarning(s"$partition partition is legal partition")
           val shuffleServerInfoList: util.List[ShuffleServerInfo] =
             partitionToShuffleServers.get(partition)
           // This mechanism of expectedTaskIdsBitmap filter is to filter out the most of data.
@@ -142,24 +141,23 @@ class BlazeUniffleShuffleReader[K, C](
               shuffleReadClient,
               readMetrics,
               rssConf)
-          iterators.add(iterator)
+          shuffleDataIterList.add(iterator)
         }
       }
-      logWarning(s"iterator size: ${iterators.size()}")
-      iterator = iterators.iterator()
-      if (iterator.hasNext) {
-        dataIterator = iterator.next
-        iterator.remove()
+      iterators = shuffleDataIterList.iterator()
+      if (iterators.hasNext) {
+        currentIterator = iterators.next
+        iterators.remove()
       }
       context.addTaskCompletionListener(new TaskCompletionListener {
         override def onTaskCompletion(context: TaskContext): Unit = {
           context.taskMetrics.mergeShuffleReadMetrics()
-          if (dataIterator != null) {
-            dataIterator.cleanup()
+          if (currentIterator != null) {
+            currentIterator.cleanup()
           }
-          if (iterator != null) {
-            while (iterator.hasNext) {
-              iterator.next().cleanup()
+          if (iterators != null) {
+            while (iterators.hasNext) {
+              iterators.next().cleanup()
             }
           }
         }
@@ -167,23 +165,21 @@ class BlazeUniffleShuffleReader[K, C](
     }
 
     override def hasNext: Boolean = try {
-      if (dataIterator == null) return false
-//      else logWarning(s"initialized data iterator is not empty.")
-      while (!dataIterator.hasNext) {
-        if (!iterator.hasNext) return false
-        logWarning("To next partition buffer.")
-        dataIterator.cleanup()
-        dataIterator = iterator.next
-        iterator.remove()
+      if (currentIterator == null) return false
+      while (!currentIterator.hasNext) {
+        if (!iterators.hasNext) return false
+        currentIterator.cleanup()
+        currentIterator = iterators.next
+        iterators.remove()
       }
-      dataIterator.hasNext
+      currentIterator.hasNext
     } catch {
       case e: RssException =>
         throw e
     }
 
     override def next: Product2[K, C] = {
-      val result: Product2[K, C] = dataIterator.next
+      val result: Product2[K, C] = currentIterator.next
       result
     }
   }
@@ -205,23 +201,18 @@ class BlazeUniffleShuffleReader[K, C](
     override protected def read(b: Array[Byte]): Int = {
       if (currentByteBuffer == null) {
         if (!iterator.hasNext) {
-//          logWarning(s"empty iterator...partitionId:$startPartition-$endPartition")
           return 0
         }
         val next = iterator.next()
         if (next == null) {
-          logWarning("empty element")
+          return 0
         }
         currentByteBuffer = next._2.asInstanceOf[ByteBuffer]
-        logWarning("gotten buffer")
         if (currentByteBuffer == null) {
           throw new RuntimeException(
             "Gotten the empty byte buffer when retrieving from uniffle client")
         }
-        logWarning(s"next buffer in inputstream. length: ${currentByteBuffer.remaining()}")
       }
-      logWarning(s"getting from offset: ${currentByteBuffer
-        .position()} and remain: ${currentByteBuffer.remaining()} with length: ${b.length}")
       if (currentByteBuffer.remaining() < b.length) {
         throw new IllegalArgumentException(
           s"ByteBuffer dont has enough data into the array buffer. actual: ${currentByteBuffer
