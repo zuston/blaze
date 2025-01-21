@@ -16,6 +16,8 @@
 package org.apache.spark.sql.execution.blaze.shuffle.uniffle
 
 import com.thoughtworks.enableIf
+import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.writer.RssShuffleWriter
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteMetricsReporter}
 import org.apache.spark.sql.execution.blaze.shuffle.{BlazeRssShuffleWriterBase, RssPartitionWriterBase}
@@ -23,7 +25,8 @@ import org.apache.spark.sql.execution.blaze.shuffle.{BlazeRssShuffleWriterBase, 
 class BlazeUniffleShuffleWriter[K, V, C](
     rssShuffleWriter: RssShuffleWriter[K, V, C],
     metrics: ShuffleWriteMetricsReporter)
-    extends BlazeRssShuffleWriterBase[K, V](metrics) {
+    extends BlazeRssShuffleWriterBase[K, V](metrics)
+    with Logging {
 
   override def getRssPartitionWriter(
       handle: ShuffleHandle,
@@ -37,4 +40,10 @@ class BlazeUniffleShuffleWriter[K, V, C](
     Seq("spark-3.2", "spark-3.3", "spark-3.4", "spark-3.5").contains(
       System.getProperty("blaze.shim")))
   override def getPartitionLengths(): Array[Long] = partitionLengths
+
+  override def stop(success: Boolean): Option[MapStatus] = {
+    logWarning(s"reporting the shuffle result...")
+    super.stop(success)
+    rssShuffleWriter.stop(success)
+  }
 }

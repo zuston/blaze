@@ -51,38 +51,38 @@ class BlazeUniffleShuffleReader[K, C](
     extends BlazeRssShuffleReaderBase[K, C](handle, context)
     with Logging {
   private val numMaps: Int =
-    FieldUtils.readField(reader.getClass, "numMaps", true).asInstanceOf[Int]
+    FieldUtils.readField(reader, "numMaps", true).asInstanceOf[Int]
   private val partitionToExpectBlocks: util.Map[Integer, Roaring64NavigableMap] = FieldUtils
-    .readField(reader.getClass, "partitionToExpectBlocks", true)
+    .readField(reader, "partitionToExpectBlocks", true)
     .asInstanceOf[util.Map[Integer, Roaring64NavigableMap]]
   private val partitionToShuffleServers: util.Map[Integer, util.List[ShuffleServerInfo]] =
     FieldUtils
-      .readField(reader.getClass, "partitionToShuffleServers", true)
+      .readField(reader, "partitionToShuffleServers", true)
       .asInstanceOf[util.Map[Integer, util.List[ShuffleServerInfo]]]
   private val mapStartIndex: Int =
-    FieldUtils.readField(reader.getClass, "mapStartIndex", true).asInstanceOf[Int]
+    FieldUtils.readField(reader, "mapStartIndex", true).asInstanceOf[Int]
   private val mapEndIndex: Int =
-    FieldUtils.readField(reader.getClass, "mapEndIndex", true).asInstanceOf[Int]
+    FieldUtils.readField(reader, "mapEndIndex", true).asInstanceOf[Int]
   private val rssConf: RssConf =
-    FieldUtils.readField(reader.getClass, "rssConf", true).asInstanceOf[RssConf]
+    FieldUtils.readField(reader, "rssConf", true).asInstanceOf[RssConf]
   FieldUtils
-    .readField(reader.getClass, "shuffleDependency", true)
+    .readField(reader, "shuffleDependency", true)
     .asInstanceOf[ShuffleDependency[K, _, C]]
   private val appId: String =
-    FieldUtils.readField(reader.getClass, "appId", true).asInstanceOf[String]
+    FieldUtils.readField(reader, "appId", true).asInstanceOf[String]
   private val shuffleId: Int =
-    FieldUtils.readField(reader.getClass, "shuffleId", true).asInstanceOf[Int]
+    FieldUtils.readField(reader, "shuffleId", true).asInstanceOf[Int]
   private val basePath: String =
-    FieldUtils.readField(reader.getClass, "basePath", true).asInstanceOf[String]
+    FieldUtils.readField(reader, "basePath", true).asInstanceOf[String]
   private val partitionNum: Int =
-    FieldUtils.readField(reader.getClass, "partitionNum", true).asInstanceOf[Int]
+    FieldUtils.readField(reader, "partitionNum", true).asInstanceOf[Int]
   private val taskIdBitmap: Roaring64NavigableMap = FieldUtils
-    .readField(reader.getClass, "taskIdBitmap", true)
+    .readField(reader, "taskIdBitmap", true)
     .asInstanceOf[Roaring64NavigableMap]
   private val hadoopConf: Configuration =
-    FieldUtils.readField(reader.getClass, "hadoopConf", true).asInstanceOf[Configuration]
+    FieldUtils.readField(reader, "hadoopConf", true).asInstanceOf[Configuration]
   private val dataDistributionType: ShuffleDataDistributionType = FieldUtils
-    .readField(reader.getClass, "dataDistributionType", true)
+    .readField(reader, "dataDistributionType", true)
     .asInstanceOf[ShuffleDataDistributionType]
   private val readMetrics: ShuffleReadMetrics = {
     var readMetrics: ShuffleReadMetrics = null

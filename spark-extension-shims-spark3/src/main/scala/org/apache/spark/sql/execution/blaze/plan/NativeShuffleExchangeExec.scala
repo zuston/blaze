@@ -150,7 +150,7 @@ case class NativeShuffleExchangeExec(
               numPartitions)
         }
         if (SparkEnv.get.shuffleManager.isInstanceOf[BlazeUniffleShuffleManager]) {
-          return writer
+          writer
             .asInstanceOf[BlazeUniffleShuffleWriter[_, _, _]]
             .nativeRssShuffleWrite(
               rdd.asInstanceOf[MapPartitionsRDD[_, _]].prev.asInstanceOf[NativeRDD],
@@ -159,6 +159,7 @@ case class NativeShuffleExchangeExec(
               context,
               partition,
               numPartitions)
+          return writer.stop(true).get
         }
 
         writer

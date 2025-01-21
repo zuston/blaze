@@ -15,7 +15,6 @@
  */
 package org.apache.spark.sql.execution.blaze.shuffle.uniffle
 
-import org.apache.commons.lang3.reflect.{FieldUtils, MethodUtils}
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.shuffle.writer.RssShuffleWriter
@@ -32,12 +31,18 @@ class UnifflePartitionWriter[K, V, C](
     extends RssPartitionWriterBase
     with Logging {
   private val mapStatusLengths: Array[Long] = Array.fill(numPartitions)(0L)
-  private val rssShuffleWriterPushBlocksMethod = MethodUtils.getAccessibleMethod(
-    rssShuffleWriter.getClass,
-    "processShuffleBlockInfos",
-    classOf[java.util.List[ShuffleBlockInfo]])
-  private val rssShuffleWriterCheckAllBufferSpilledMethod =
-    MethodUtils.getAccessibleMethod(rssShuffleWriter.getClass, "checkAllBufferSpilled");
+  private val rssShuffleWriterPushBlocksMethod = {
+    val method = rssShuffleWriter.getClass.getDeclaredMethod(
+      "processShuffleBlockInfos",
+      classOf[java.util.List[ShuffleBlockInfo]])
+    method.setAccessible(true)
+    method
+  }
+  private val rssShuffleWriterCheckAllBufferSpilledMethod = {
+    val method = rssShuffleWriter.getClass.getDeclaredMethod("checkAllBufferSpilled")
+    method.setAccessible(true)
+    method
+  };
 
   override def write(partitionId: Int, buffer: ByteBuffer): Unit = {
     val numBytes = buffer.limit()
@@ -74,17 +79,12 @@ class UnifflePartitionWriter[K, V, C](
 
   private def waitAndCheckBlocksSend(): Unit = {
     logInfo(s"waiting all blocks sending to the remote shuffle servers for mapId: $mapId")
-    val method = MethodUtils.getAccessibleMethod(
-      rssShuffleWriter.getClass,
-      "checkBlockSendResult",
-      classOf[java.util.HashSet[Long]])
-    val acceptedBlockIds = FieldUtils.readField(rssShuffleWriter.getClass, "blockIds", true)
-    method.invoke(rssShuffleWriter, acceptedBlockIds)
+    val method = rssShuffleWriter.getClass.getDeclaredMethod("internalCheckBlockSendResult")
+    method.setAccessible(true)
+    method.invoke(rssShuffleWriter)
   }
 
   override def getPartitionLengthMap: Array[Long] = mapStatusLengths
 
-  override def stop(isSuccess: Boolean): Unit = {
-    rssShuffleWriter.stop(isSuccess)
-  }
+  override def stop(isSuccess: Boolean): Unit = {}
 }

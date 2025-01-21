@@ -17,7 +17,7 @@ package org.apache.spark.shuffle.uniffle
 
 import org.apache.spark.shuffle.{BaseShuffleHandle, RssShuffleHandle}
 
-class RssShuffleHandleWrapper[K, V, C](rssShuffleHandleInfo: RssShuffleHandle[K, V, C])
+class RssShuffleHandleWrapper[K, V, C](val rssShuffleHandleInfo: RssShuffleHandle[K, V, C])
     extends BaseShuffleHandle[K, V, C](
       rssShuffleHandleInfo.getShuffleId,
       rssShuffleHandleInfo.getDependency) {}

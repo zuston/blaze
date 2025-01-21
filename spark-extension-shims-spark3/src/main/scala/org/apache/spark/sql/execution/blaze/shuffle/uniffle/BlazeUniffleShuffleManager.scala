@@ -28,7 +28,8 @@ class BlazeUniffleShuffleManager(conf: SparkConf, isDriver: Boolean)
   override def registerShuffle[K, V, C](
       shuffleId: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-    uniffleShuffleManager.registerShuffle(shuffleId, dependency)
+    val handle = uniffleShuffleManager.registerShuffle(shuffleId, dependency)
+    new RssShuffleHandleWrapper(handle.asInstanceOf[RssShuffleHandle[K, V, C]])
   }
 
   override def unregisterShuffle(shuffleId: Int): Boolean = {
@@ -40,7 +41,16 @@ class BlazeUniffleShuffleManager(conf: SparkConf, isDriver: Boolean)
       startPartition: Int,
       endPartition: Int,
       context: TaskContext,
-      metrics: ShuffleReadMetricsReporter): BlazeRssShuffleReaderBase[K, C] = ???
+      metrics: ShuffleReadMetricsReporter): BlazeRssShuffleReaderBase[K, C] = {
+    getBlazeRssShuffleReader(
+      handle,
+      0,
+      Int.MaxValue,
+      startPartition,
+      endPartition,
+      context,
+      metrics)
+  }
 
   override def getBlazeRssShuffleReader[K, C](
       handle: ShuffleHandle,
@@ -50,10 +60,14 @@ class BlazeUniffleShuffleManager(conf: SparkConf, isDriver: Boolean)
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): BlazeRssShuffleReaderBase[K, C] = {
-    val rssHandle = handle.asInstanceOf[RssShuffleHandle[K, _, C]]
-    val rssHandleWrapper = new RssShuffleHandleWrapper(rssHandle)
+    val rssHandleWrapper = handle.asInstanceOf[RssShuffleHandleWrapper[K, _, C]]
     val reader =
-      uniffleShuffleManager.getReader(handle, startPartition, endPartition, context, metrics)
+      uniffleShuffleManager.getReader(
+        rssHandleWrapper.rssShuffleHandleInfo,
+        startPartition,
+        endPartition,
+        context,
+        metrics)
     new BlazeUniffleShuffleReader(
       reader.asInstanceOf[RssShuffleReader[K, C]],
       rssHandleWrapper,
@@ -71,7 +85,8 @@ class BlazeUniffleShuffleManager(conf: SparkConf, isDriver: Boolean)
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
-    uniffleShuffleManager.getReader(handle, startPartition, endPartition, context, metrics)
+    val rssHandle = handle.asInstanceOf[RssShuffleHandleWrapper[K, _, C]].rssShuffleHandleInfo
+    uniffleShuffleManager.getReader(rssHandle, startPartition, endPartition, context, metrics)
   }
 
   override def getRssShuffleReader[K, C](
@@ -82,8 +97,9 @@ class BlazeUniffleShuffleManager(conf: SparkConf, isDriver: Boolean)
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
+    val rssHandle = handle.asInstanceOf[RssShuffleHandleWrapper[K, _, C]].rssShuffleHandleInfo
     uniffleShuffleManager.getReaderForRange(
-      handle,
+      rssHandle,
       startMapIndex,
       endMapIndex,
       startPartition,
@@ -97,8 +113,9 @@ class BlazeUniffleShuffleManager(conf: SparkConf, isDriver: Boolean)
       mapId: Long,
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): BlazeRssShuffleWriterBase[K, V] = {
+    val rssHandle = handle.asInstanceOf[RssShuffleHandleWrapper[K, _, V]].rssShuffleHandleInfo
     val writer: ShuffleWriter[K, V] =
-      uniffleShuffleManager.getWriter(handle, mapId, context, metrics)
+      uniffleShuffleManager.getWriter(rssHandle, mapId, context, metrics)
     new BlazeUniffleShuffleWriter(writer.asInstanceOf[RssShuffleWriter[K, V, _]], metrics)
   }
 
@@ -107,7 +124,8 @@ class BlazeUniffleShuffleManager(conf: SparkConf, isDriver: Boolean)
       mapId: Long,
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
-    uniffleShuffleManager.getWriter(handle, mapId, context, metrics)
+    val rssHandle = handle.asInstanceOf[RssShuffleHandleWrapper[K, _, V]].rssShuffleHandleInfo
+    uniffleShuffleManager.getWriter(rssHandle, mapId, context, metrics)
   }
 
   override def shuffleBlockResolver: ShuffleBlockResolver = {
