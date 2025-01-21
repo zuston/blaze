@@ -65,7 +65,7 @@ class BlazeUniffleShuffleReader[K, C](
     FieldUtils.readField(reader, "mapEndIndex", true).asInstanceOf[Int]
   private val rssConf: RssConf =
     FieldUtils.readField(reader, "rssConf", true).asInstanceOf[RssConf]
-  FieldUtils
+  private val dependency = FieldUtils
     .readField(reader, "shuffleDependency", true)
     .asInstanceOf[ShuffleDependency[K, _, C]]
   private val appId: String =
@@ -84,18 +84,12 @@ class BlazeUniffleShuffleReader[K, C](
   private val dataDistributionType: ShuffleDataDistributionType = FieldUtils
     .readField(reader, "dataDistributionType", true)
     .asInstanceOf[ShuffleDataDistributionType]
-  private val readMetrics: ShuffleReadMetrics = {
-    var readMetrics: ShuffleReadMetrics = null
-    if (metrics != null) readMetrics = {
-      val cls: Class[_] = Class.forName("org.apache.spark.shuffle.RssShuffleManager$ReadMetrics")
-      cls.getDeclaredConstructor().newInstance(metrics).asInstanceOf[ShuffleReadMetrics]
-    }
-    else readMetrics = context.taskMetrics.shuffleReadMetrics
-    readMetrics
-  }
+  private val readMetrics: ShuffleReadMetrics =
+    FieldUtils.readField(reader, "readMetrics", true).asInstanceOf[ShuffleReadMetrics]
 
   override protected def readBlocks(): Iterator[(BlockId, InputStream)] = {
-    val inputStream = new UniffleInputStream(new MultiPartitionIterator[K, C]())
+    val inputStream =
+      new UniffleInputStream(new MultiPartitionIterator[K, C](), startPartition, endPartition)
     Iterator.single((null, inputStream))
   }
 
@@ -103,45 +97,55 @@ class BlazeUniffleShuffleReader[K, C](
     val iterators: util.List[RssShuffleDataIterator[K, C]] =
       new util.ArrayList[RssShuffleDataIterator[K, C]]()
 
+    var iterator: util.Iterator[RssShuffleDataIterator[K, C]] = null
+    var dataIterator: RssShuffleDataIterator[K, C] = null
+
     if (numMaps > 0) {
       for (partition <- startPartition until endPartition) {
         if (partitionToExpectBlocks.get(partition).isEmpty) {
-          logInfo(s"$partition partition is empty partition")
-        } else {}
-        val shuffleServerInfoList: util.List[ShuffleServerInfo] =
-          partitionToShuffleServers.get(partition)
-        // This mechanism of expectedTaskIdsBitmap filter is to filter out the most of data.
-        // especially for AQE skew optimization
-        val expectedTaskIdsBitmapFilterEnable: Boolean =
-          !(mapStartIndex == 0 && mapEndIndex == Integer.MAX_VALUE) || shuffleServerInfoList.size > 1
-        val retryMax: Int = rssConf.getInteger(
-          RssClientConfig.RSS_CLIENT_RETRY_MAX,
-          RssClientConfig.RSS_CLIENT_RETRY_MAX_DEFAULT_VALUE)
-        val retryIntervalMax: Long = rssConf.getLong(
-          RssClientConfig.RSS_CLIENT_RETRY_INTERVAL_MAX,
-          RssClientConfig.RSS_CLIENT_RETRY_INTERVAL_MAX_DEFAULT_VALUE)
-        val shuffleReadClient: ShuffleReadClient =
-          ShuffleClientFactory.getInstance.createShuffleReadClient(
-            ShuffleClientFactory.newReadBuilder
-              .appId(appId)
-              .shuffleId(shuffleId)
-              .partitionId(partition)
-              .basePath(basePath)
-              .partitionNumPerRange(1)
-              .partitionNum(partitionNum)
-              .blockIdBitmap(partitionToExpectBlocks.get(partition))
-              .taskIdBitmap(taskIdBitmap)
-              .shuffleServerInfoList(shuffleServerInfoList)
-              .hadoopConf(hadoopConf)
-              .shuffleDataDistributionType(dataDistributionType)
-              .expectedTaskIdsBitmapFilterEnable(expectedTaskIdsBitmapFilterEnable)
-              .retryMax(retryMax)
-              .retryIntervalMax(retryIntervalMax)
-              .rssConf(rssConf))
-        val iterator: RssShuffleDataIterWrapper[K, C] =
-          new RssShuffleDataIterWrapper[K, C](shuffleReadClient, readMetrics, rssConf)
-        iterators.add(iterator)
+//          logWarning(s"$partition partition is empty partition")
+        } else {
+          logWarning(s"$partition partition is legal partition")
+          val shuffleServerInfoList: util.List[ShuffleServerInfo] =
+            partitionToShuffleServers.get(partition)
+          // This mechanism of expectedTaskIdsBitmap filter is to filter out the most of data.
+          // especially for AQE skew optimization
+          val expectedTaskIdsBitmapFilterEnable: Boolean =
+            !(mapStartIndex == 0 && mapEndIndex == Integer.MAX_VALUE) || shuffleServerInfoList.size > 1
+          val retryMax: Int = rssConf.getInteger(
+            RssClientConfig.RSS_CLIENT_RETRY_MAX,
+            RssClientConfig.RSS_CLIENT_RETRY_MAX_DEFAULT_VALUE)
+          val retryIntervalMax: Long = rssConf.getLong(
+            RssClientConfig.RSS_CLIENT_RETRY_INTERVAL_MAX,
+            RssClientConfig.RSS_CLIENT_RETRY_INTERVAL_MAX_DEFAULT_VALUE)
+          val shuffleReadClient: ShuffleReadClient =
+            ShuffleClientFactory.getInstance.createShuffleReadClient(
+              ShuffleClientFactory.newReadBuilder
+                .appId(appId)
+                .shuffleId(shuffleId)
+                .partitionId(partition)
+                .basePath(basePath)
+                .partitionNumPerRange(1)
+                .partitionNum(partitionNum)
+                .blockIdBitmap(partitionToExpectBlocks.get(partition))
+                .taskIdBitmap(taskIdBitmap)
+                .shuffleServerInfoList(shuffleServerInfoList)
+                .hadoopConf(hadoopConf)
+                .shuffleDataDistributionType(dataDistributionType)
+                .expectedTaskIdsBitmapFilterEnable(expectedTaskIdsBitmapFilterEnable)
+                .retryMax(retryMax)
+                .retryIntervalMax(retryIntervalMax)
+                .rssConf(rssConf))
+          val iterator: RssShuffleDataIterWrapper[K, C] =
+            new RssShuffleDataIterWrapper[K, C](
+              dependency,
+              shuffleReadClient,
+              readMetrics,
+              rssConf)
+          iterators.add(iterator)
+        }
       }
+      logWarning(s"iterator size: ${iterators.size()}")
       iterator = iterators.iterator()
       if (iterator.hasNext) {
         dataIterator = iterator.next
@@ -153,20 +157,21 @@ class BlazeUniffleShuffleReader[K, C](
           if (dataIterator != null) {
             dataIterator.cleanup()
           }
-          while (iterator.hasNext) {
-            iterator.next().cleanup()
+          if (iterator != null) {
+            while (iterator.hasNext) {
+              iterator.next().cleanup()
+            }
           }
         }
       })
     }
 
-    var iterator: util.Iterator[RssShuffleDataIterator[K, C]] = null
-    var dataIterator: RssShuffleDataIterator[K, C] = null
-
     override def hasNext: Boolean = try {
       if (dataIterator == null) return false
+//      else logWarning(s"initialized data iterator is not empty.")
       while (!dataIterator.hasNext) {
         if (!iterator.hasNext) return false
+        logWarning("To next partition buffer.")
         dataIterator.cleanup()
         dataIterator = iterator.next
         iterator.remove()
@@ -183,40 +188,64 @@ class BlazeUniffleShuffleReader[K, C](
     }
   }
 
-  class UniffleInputStream(iterator: MultiPartitionIterator[_, _]) extends java.io.InputStream {
+  class UniffleInputStream(
+      iterator: MultiPartitionIterator[_, _],
+      startPartition: Int,
+      endPartition: Int)
+      extends java.io.InputStream {
     private var currentByteBuffer: ByteBuffer = null
 
     override def read(): Int = {
-      throw new UnsupportedOperationException("")
+      val singleByteBuff = new Array[Byte](1)
+      val bytesRead = read(singleByteBuff)
+      if (bytesRead <= 0) -1
+      else singleByteBuff(0).toInt
     }
 
     override protected def read(b: Array[Byte]): Int = {
       if (currentByteBuffer == null) {
         if (!iterator.hasNext) {
+//          logWarning(s"empty iterator...partitionId:$startPartition-$endPartition")
           return 0
         }
-        currentByteBuffer = iterator.next()._2.asInstanceOf[ByteBuffer]
+        val next = iterator.next()
+        if (next == null) {
+          logWarning("empty element")
+        }
+        currentByteBuffer = next._2.asInstanceOf[ByteBuffer]
+        logWarning("gotten buffer")
         if (currentByteBuffer == null) {
           throw new RuntimeException(
             "Gotten the empty byte buffer when retrieving from uniffle client")
         }
+        logWarning(s"next buffer in inputstream. length: ${currentByteBuffer.remaining()}")
       }
+      logWarning(s"getting from offset: ${currentByteBuffer
+        .position()} and remain: ${currentByteBuffer.remaining()} with length: ${b.length}")
       if (currentByteBuffer.remaining() < b.length) {
         throw new IllegalArgumentException(
           s"ByteBuffer dont has enough data into the array buffer. actual: ${currentByteBuffer
             .remaining()}, required: ${b.length}")
       }
       currentByteBuffer.get(b)
+      if (currentByteBuffer.remaining() <= 0) {
+        currentByteBuffer = null
+      }
       b.length
     }
   }
 }
 
 class RssShuffleDataIterWrapper[K, V](
+    dependency: ShuffleDependency[_, _, _],
     readClient: ShuffleReadClient,
     shuffleReadMetrics: ShuffleReadMetrics,
     rssConf: RssConf)
-    extends RssShuffleDataIterator[K, V](null, readClient, shuffleReadMetrics, rssConf) {
+    extends RssShuffleDataIterator[K, V](
+      dependency.serializer,
+      readClient,
+      shuffleReadMetrics,
+      rssConf) {
 
   override def createKVIterator(data: ByteBuffer): Iterator[Tuple2[AnyRef, AnyRef]] = {
     val element = Tuple2.apply(1.asInstanceOf[AnyRef], data.asInstanceOf[AnyRef])

@@ -38,11 +38,11 @@ class UnifflePartitionWriter[K, V, C](
     method.setAccessible(true)
     method
   }
-  private val rssShuffleWriterCheckAllBufferSpilledMethod = {
-    val method = rssShuffleWriter.getClass.getDeclaredMethod("checkAllBufferSpilled")
-    method.setAccessible(true)
-    method
-  };
+//  private val rssShuffleWriterCheckAllBufferSpilledMethod = {
+//    val method = rssShuffleWriter.getClass.getDeclaredMethod("checkAllBufferSpilled")
+//    method.setAccessible(true)
+//    method
+//  };
 
   override def write(partitionId: Int, buffer: ByteBuffer): Unit = {
     val numBytes = buffer.limit()
@@ -70,7 +70,7 @@ class UnifflePartitionWriter[K, V, C](
     if (restBlocks != null && !restBlocks.isEmpty) {
       rssShuffleWriterPushBlocksMethod.invoke(rssShuffleWriter, restBlocks)
     }
-    rssShuffleWriterCheckAllBufferSpilledMethod.invoke(rssShuffleWriter)
+//    rssShuffleWriterCheckAllBufferSpilledMethod.invoke(rssShuffleWriter)
     waitAndCheckBlocksSend()
 
     val writtenDurationMs = bufferManager.getWriteTime + (System.currentTimeMillis() - start)
