@@ -194,6 +194,7 @@ class BlazeUniffleShuffleReader[K, C](
     private var byteArr: Array[Byte] = null
 
     override def read(): Int = {
+      logInfo(s"Getting 1 byte from uniffle buffer that offset: $position, len: $limit")
       if (byteArr == null) {
         if (!toNextBuffer()) {
           return -1
@@ -231,6 +232,7 @@ class BlazeUniffleShuffleReader[K, C](
     }
 
     override def read(arryBytes: Array[Byte], off: Int, len: Int): Int = {
+      logInfo(s"Getting buffer of offset: $off, len: $len from uniffle buffer that offset: $position, len: $limit")
       if (arryBytes == null) {
         throw new NullPointerException()
       } else if (off >= 0 && len >= 0 && len <= arryBytes.length - off) {
