@@ -189,40 +189,34 @@ class BlazeUniffleShuffleReader[K, C](
       startPartition: Int,
       endPartition: Int)
       extends java.io.InputStream {
-    private var currentByteBuffer: ByteBuffer = null
+    private var position: Int = 0
+    private var limit: Int = 0
+    private var byteArr: Array[Byte] = null
 
     override def read(): Int = {
-      val singleByteBuff = new Array[Byte](1)
-      val bytesRead = read(singleByteBuff)
-      if (bytesRead <= 0) -1
-      else singleByteBuff(0).toInt
-    }
-
-    override protected def read(b: Array[Byte]): Int = {
-      if (currentByteBuffer == null) {
+      if (byteArr == null) {
         if (!iterator.hasNext) {
-          return 0
+          return -1
         }
         val next = iterator.next()
         if (next == null) {
-          return 0
+          return -1
         }
-        currentByteBuffer = next._2.asInstanceOf[ByteBuffer]
-        if (currentByteBuffer == null) {
-          throw new RuntimeException(
-            "Gotten the empty byte buffer when retrieving from uniffle client")
+        byteArr = next._2.asInstanceOf[ByteBuffer].array()
+        if (byteArr == null) {
+          return -1
         }
+        position = 0
+        limit = byteArr.length
       }
-      if (currentByteBuffer.remaining() < b.length) {
-        throw new IllegalArgumentException(
-          s"ByteBuffer dont has enough data into the array buffer. actual: ${currentByteBuffer
-            .remaining()}, required: ${b.length}")
+      if (position < limit) {
+        val result = byteArr(position).toInt
+        position += 1
+        return result
+      } else {
+        byteArr = null
+        return read()
       }
-      currentByteBuffer.get(b)
-      if (currentByteBuffer.remaining() <= 0) {
-        currentByteBuffer = null
-      }
-      b.length
     }
   }
 }
