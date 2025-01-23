@@ -55,7 +55,9 @@ class UnifflePartitionWriter[K, V, C](
       bufferManager.addPartitionData(partitionId, bytes)
     }
     if (shuffleBlockInfos != null && !shuffleBlockInfos.isEmpty) {
-      rssShuffleWriterPushBlocksMethod.invoke(rssShuffleWriter, shuffleBlockInfos)
+      rssShuffleWriter.synchronized {
+        rssShuffleWriterPushBlocksMethod.invoke(rssShuffleWriter, shuffleBlockInfos)
+      }
     }
 
     metrics.incBytesWritten(bytesWritten)

@@ -184,7 +184,7 @@ class BlazeUniffleShuffleReader[K, C](
     }
   }
 
-  class UniffleInputStream(
+  private class UniffleInputStream(
       iterator: MultiPartitionIterator[_, _],
       startPartition: Int,
       endPartition: Int)
