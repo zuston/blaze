@@ -210,7 +210,7 @@ class BlazeUniffleShuffleReader[K, C](
         limit = byteArr.length
       }
       if (position < limit) {
-        val result = byteArr(position).toInt
+        val result = byteArr(position) & 255
         position += 1
         return result
       } else {
