@@ -51,7 +51,9 @@ class UnifflePartitionWriter[K, V, C](
     val bytesWritten = bytes.length
 
     val bufferManager = rssShuffleWriter.getBufferManager
-    val shuffleBlockInfos = bufferManager.addPartitionData(partitionId, bytes)
+    val shuffleBlockInfos = rssShuffleWriter.synchronized {
+      bufferManager.addPartitionData(partitionId, bytes)
+    }
     if (shuffleBlockInfos != null && !shuffleBlockInfos.isEmpty) {
       rssShuffleWriterPushBlocksMethod.invoke(rssShuffleWriter, shuffleBlockInfos)
     }
