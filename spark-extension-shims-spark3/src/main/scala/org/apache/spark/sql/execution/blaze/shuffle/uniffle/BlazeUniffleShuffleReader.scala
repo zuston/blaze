@@ -195,32 +195,24 @@ class BlazeUniffleShuffleReader[K, C](
 
     override def read(): Int = {
       if (byteArr == null) {
-        if (!iterator.hasNext) {
+        if (!toNextBuffer()) {
           return -1
         }
-        val next = iterator.next()
-        if (next == null) {
-          return -1
-        }
-        byteArr = next._2.asInstanceOf[ByteBuffer].array()
-        if (byteArr == null) {
-          return -1
-        }
-        position = 0
-        limit = byteArr.length
-        logWarning(s"fetched bytes. postition: $position, limit: $limit")
       }
       if (position < limit) {
         val result = byteArr(position) & 255
         position += 1
-        return result
+        result
       } else {
         byteArr = null
-        return read()
+        read()
       }
     }
 
-    private def getNextBuffer(): Boolean = {
+    private def toNextBuffer(): Boolean = {
+      if (position < limit) {
+        throw new IllegalAccessException()
+      }
       if (!iterator.hasNext) {
         return false
       }
@@ -234,7 +226,7 @@ class BlazeUniffleShuffleReader[K, C](
       }
       position = 0
       limit = byteArr.length
-      logWarning(s"fetched bytes from def. postition: $position, limit: $limit")
+      logWarning(s"to next buffer. position: $position, limit: $limit")
       true
     }
 
@@ -247,12 +239,12 @@ class BlazeUniffleShuffleReader[K, C](
         } else {
           var readBytes = 0
           var bytesToRead = 0
-          readBytes = 0
           while (readBytes < len) {
-            while (this.position >= this.limit)
-              if (!this.getNextBuffer)
+            while (this.position >= this.limit) {
+              if (!this.toNextBuffer)
                 return if (readBytes > 0) readBytes
                 else -1
+            }
             bytesToRead = Math.min(this.limit - this.position, len - readBytes)
             System.arraycopy(this.byteArr, this.position, arryBytes, off + readBytes, bytesToRead)
             this.position += bytesToRead
