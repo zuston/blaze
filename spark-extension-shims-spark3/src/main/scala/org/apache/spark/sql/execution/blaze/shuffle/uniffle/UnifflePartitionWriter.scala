@@ -75,17 +75,10 @@ class UnifflePartitionWriter[K, V, C](
       rssShuffleWriterPushBlocksMethod.invoke(rssShuffleWriter, restBlocks)
     }
 //    rssShuffleWriterCheckAllBufferSpilledMethod.invoke(rssShuffleWriter)
-    waitAndCheckBlocksSend()
+//    waitAndCheckBlocksSend()
 
     val writtenDurationMs = bufferManager.getWriteTime + (System.currentTimeMillis() - start)
     metrics.incWriteTime(writtenDurationMs)
-  }
-
-  private def waitAndCheckBlocksSend(): Unit = {
-    logInfo(s"waiting all blocks sending to the remote shuffle servers for mapId: $mapId")
-    val method = rssShuffleWriter.getClass.getDeclaredMethod("internalCheckBlockSendResult")
-    method.setAccessible(true)
-    method.invoke(rssShuffleWriter)
   }
 
   override def getPartitionLengthMap: Array[Long] = mapStatusLengths

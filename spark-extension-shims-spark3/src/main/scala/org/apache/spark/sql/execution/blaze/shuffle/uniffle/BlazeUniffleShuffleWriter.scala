@@ -41,7 +41,15 @@ class BlazeUniffleShuffleWriter[K, V, C](
       System.getProperty("blaze.shim")))
   override def getPartitionLengths(): Array[Long] = partitionLengths
 
+  private def waitAndCheckBlocksSend(): Unit = {
+    logInfo(s"waiting all blocks sending to the remote shuffle servers.")
+    val method = rssShuffleWriter.getClass.getDeclaredMethod("internalCheckBlockSendResult")
+    method.setAccessible(true)
+    method.invoke(rssShuffleWriter)
+  }
+
   override def stop(success: Boolean): Option[MapStatus] = {
+    waitAndCheckBlocksSend()
     logWarning(s"reporting the shuffle result...")
     super.stop(success)
     rssShuffleWriter.stop(success)
