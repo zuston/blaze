@@ -208,6 +208,7 @@ class BlazeUniffleShuffleReader[K, C](
         }
         position = 0
         limit = byteArr.length
+        logWarning(s"fetched bytes. postition: $position, limit: $limit")
       }
       if (position < limit) {
         val result = byteArr(position) & 255
@@ -216,6 +217,53 @@ class BlazeUniffleShuffleReader[K, C](
       } else {
         byteArr = null
         return read()
+      }
+    }
+
+    private def getNextBuffer(): Boolean = {
+      if (!iterator.hasNext) {
+        return false
+      }
+      val next = iterator.next()
+      if (next == null) {
+        return false
+      }
+      byteArr = next._2.asInstanceOf[ByteBuffer].array()
+      if (byteArr == null) {
+        return false
+      }
+      position = 0
+      limit = byteArr.length
+      logWarning(s"fetched bytes from def. postition: $position, limit: $limit")
+      true
+    }
+
+    override def read(arryBytes: Array[Byte], off: Int, len: Int): Int = {
+      if (arryBytes == null) {
+        throw new NullPointerException()
+      } else if (off >= 0 && len >= 0 && len <= arryBytes.length - off) {
+        if (len == 0) {
+          return 0
+        } else {
+          var readBytes = 0
+          var bytesToRead = 0
+          readBytes = 0
+          while (readBytes < len) {
+            while (this.position >= this.limit)
+              if (!this.getNextBuffer)
+                return if (readBytes > 0) readBytes
+                else -1
+            bytesToRead = Math.min(this.limit - this.position, len - readBytes)
+            System.arraycopy(this.byteArr, this.position, arryBytes, off + readBytes, bytesToRead)
+            this.position += bytesToRead
+
+            readBytes += bytesToRead
+          }
+
+          return readBytes
+        }
+      } else {
+        throw new IndexOutOfBoundsException
       }
     }
   }
