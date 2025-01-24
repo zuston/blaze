@@ -141,7 +141,7 @@ impl<R: Read> IpcCompressionReader<R> {
                                 return Err(err);
                             }
                         };
-                        info!("block len: {}", block_len);
+                        info!("[block start] block len: {}", block_len);
                         let taken = input.take(block_len as u64);
 
                         self.0.input = InputState::BlockContent(IoCompressionReader::try_new(
@@ -156,6 +156,7 @@ impl<R: Read> IpcCompressionReader<R> {
                             Ok(len)
                         }
                         Ok(_zero) => {
+                            info!("[block content] to next block start. len=0");
                             let input = block_reader.finish_into_inner()?;
                             self.0.input = InputState::BlockStart(input.into_inner());
                             self.read(buf)

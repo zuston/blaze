@@ -227,7 +227,7 @@ class BlazeUniffleShuffleReader[K, C](
       }
       position = 0
       limit = byteArr.length
-      logWarning(s"to next buffer. position: $position, limit: $limit")
+      logInfo(s"to next buffer. position: $position, limit: $limit")
       true
     }
 
