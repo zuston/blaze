@@ -21,6 +21,7 @@ use arrow::{
 };
 pub use batch_serde::{read_array, write_array};
 use datafusion::common::Result;
+use log::info;
 pub use scalar_serde::{read_scalar, write_scalar};
 
 use crate::arrow::cast::cast;
@@ -82,6 +83,9 @@ pub fn read_one_batch(
     std::io::copy(&mut input, &mut std::io::sink())?;
 
     assert!(cols.iter().all(|col| col.len() == num_rows));
+
+    info!("read rows number: {} with total len: {}", num_rows, batch_data_len);
+
     return Ok(Some((num_rows, cols)));
 }
 
