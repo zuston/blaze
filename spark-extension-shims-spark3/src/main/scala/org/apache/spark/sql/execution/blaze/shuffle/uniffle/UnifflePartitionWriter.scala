@@ -62,6 +62,8 @@ class UnifflePartitionWriter[K, V, C](
 
     metrics.incBytesWritten(bytesWritten)
     mapStatusLengths(partitionId) += bytesWritten
+
+//    logInfo(s"partition:$partitionId with $bytesWritten pushed to rss")
   }
 
   override def flush(): Unit = {}

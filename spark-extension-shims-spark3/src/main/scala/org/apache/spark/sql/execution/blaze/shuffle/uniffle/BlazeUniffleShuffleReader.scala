@@ -231,12 +231,12 @@ class BlazeUniffleShuffleReader[K, C](
       val bytebuffer = ByteBuffer.wrap(arr)
       bytebuffer.order(ByteOrder.LITTLE_ENDIAN)
       val len = bytebuffer.getInt()
-      logInfo(s"to next buffer. position: $position, limit: $limit. And the len: $len")
+//      logInfo(s"to next buffer. position: $position, limit: $limit. And the len: $len")
       true
     }
 
     override def read(arryBytes: Array[Byte], off: Int, len: Int): Int = {
-      logInfo(s"Getting buffer of offset: $off, len: $len from uniffle buffer that offset: $position, len: $limit")
+//      logInfo(s"Getting buffer of offset: $off, len: $len from uniffle buffer that offset: $position, len: $limit")
       if (arryBytes == null) {
         throw new NullPointerException()
       } else if (off >= 0 && len >= 0 && len <= arryBytes.length - off) {

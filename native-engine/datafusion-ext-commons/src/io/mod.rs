@@ -84,7 +84,7 @@ pub fn read_one_batch(
 
     assert!(cols.iter().all(|col| col.len() == num_rows));
 
-    info!("read rows number: {} with total len: {}", num_rows, batch_data_len);
+    // info!("read rows number: {} with total len: {}", num_rows, batch_data_len);
 
     return Ok(Some((num_rows, cols)));
 }
