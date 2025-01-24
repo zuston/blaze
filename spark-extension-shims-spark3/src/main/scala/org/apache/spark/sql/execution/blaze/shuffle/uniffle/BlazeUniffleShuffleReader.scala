@@ -227,7 +227,9 @@ class BlazeUniffleShuffleReader[K, C](
       }
       position = 0
       limit = byteArr.length
-      logInfo(s"to next buffer. position: $position, limit: $limit")
+      val arr = Array(byteArr(0), byteArr(1), byteArr(2), byteArr(3))
+      val len = ByteBuffer.wrap(arr).getInt
+      logInfo(s"to next buffer. position: $position, limit: $limit. And the len: $len")
       true
     }
 
