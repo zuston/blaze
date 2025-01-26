@@ -21,7 +21,6 @@ use arrow::{
 };
 pub use batch_serde::{read_array, write_array};
 use datafusion::common::Result;
-use log::info;
 pub use scalar_serde::{read_scalar, write_scalar};
 
 use crate::arrow::cast::cast;

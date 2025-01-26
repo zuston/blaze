@@ -21,7 +21,6 @@ use arrow::{array::ArrayRef, datatypes::SchemaRef};
 use blaze_jni_bridge::{conf, conf::StringConf, is_jni_bridge_inited};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use datafusion::common::Result;
-use log::info;
 use datafusion_ext_commons::{
     df_execution_err,
     io::{read_one_batch, write_one_batch},

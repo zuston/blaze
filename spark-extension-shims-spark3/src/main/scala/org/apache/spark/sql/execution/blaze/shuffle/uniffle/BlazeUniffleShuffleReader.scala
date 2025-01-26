@@ -89,7 +89,7 @@ class BlazeUniffleShuffleReader[K, C](
 
   override protected def readBlocks(): Iterator[(BlockId, InputStream)] = {
     val inputStream =
-      new UniffleInputStream(new MultiPartitionIterator[K, C](), startPartition, endPartition)
+      new UniffleInputStream(new MultiPartitionIterator[K, C](), shuffleId, startPartition, endPartition)
     Iterator.single((null, inputStream))
   }
 
@@ -144,6 +144,7 @@ class BlazeUniffleShuffleReader[K, C](
           shuffleDataIterList.add(iterator)
         }
       }
+      logInfo(s"Gotten iterator size: ${shuffleDataIterList.size()}")
       iterators = shuffleDataIterList.iterator()
       if (iterators.hasNext) {
         currentIterator = iterators.next
@@ -167,8 +168,12 @@ class BlazeUniffleShuffleReader[K, C](
     override def hasNext: Boolean = try {
       if (currentIterator == null) return false
       while (!currentIterator.hasNext) {
-        if (!iterators.hasNext) return false
+        logInfo(s"to next iterator. has: ${iterators.hasNext}")
         currentIterator.cleanup()
+        if (!iterators.hasNext) {
+          currentIterator = null
+          return false
+        }
         currentIterator = iterators.next
         iterators.remove()
       }
@@ -186,12 +191,17 @@ class BlazeUniffleShuffleReader[K, C](
 
   private class UniffleInputStream(
       iterator: MultiPartitionIterator[_, _],
+      shuffleId: Int,
       startPartition: Int,
       endPartition: Int)
       extends java.io.InputStream {
     private var position: Int = 0
     private var limit: Int = 0
     private var byteArr: Array[Byte] = null
+
+    private var total_real: Long = 0
+    private var total_gotten: Long = 0
+    private var total_read: Long = 0
 
     override def read(): Int = {
       logInfo(s"Getting 1 byte from uniffle buffer that offset: $position, len: $limit")
@@ -221,17 +231,21 @@ class BlazeUniffleShuffleReader[K, C](
       if (next == null) {
         return false
       }
-      byteArr = next._2.asInstanceOf[ByteBuffer].array()
+      var bb = next._2.asInstanceOf[ByteBuffer]
+      byteArr = bb.array()
       if (byteArr == null) {
         return false
       }
-      position = 0
-      limit = byteArr.length
-      val arr = Array(byteArr(0), byteArr(1), byteArr(2), byteArr(3))
-      val bytebuffer = ByteBuffer.wrap(arr)
-      bytebuffer.order(ByteOrder.LITTLE_ENDIAN)
-      val len = bytebuffer.getInt()
+      position = bb.position()
+      limit = bb.limit()
+//      val arr = Array(byteArr(0), byteArr(1), byteArr(2), byteArr(3))
+//      val bytebuffer = ByteBuffer.wrap(arr)
+//      bytebuffer.order(ByteOrder.LITTLE_ENDIAN)
+//      val len = bytebuffer.getInt()
 //      logInfo(s"to next buffer. position: $position, limit: $limit. And the len: $len")
+
+      total_real += next._1.asInstanceOf[Int]
+      total_gotten += (limit - position)
       true
     }
 
@@ -243,13 +257,25 @@ class BlazeUniffleShuffleReader[K, C](
         if (len == 0) {
           return 0
         } else {
+          if (byteArr == null) {
+            if (!toNextBuffer()) {
+              logInfo(s"total read: $total_read. total gotten: $total_gotten")
+              return -1
+            }
+          }
+
           var readBytes = 0
           var bytesToRead = 0
           while (readBytes < len) {
             while (this.position >= this.limit) {
               if (!this.toNextBuffer)
-                return if (readBytes > 0) readBytes
-                else -1
+                return if (readBytes > 0) {
+                   total_read += readBytes
+                   readBytes
+                } else {
+                  logInfo(s"total read: $total_read. total gotten: $total_gotten. total_real: $total_real")
+                  -1
+                }
             }
             bytesToRead = Math.min(this.limit - this.position, len - readBytes)
             System.arraycopy(this.byteArr, this.position, arryBytes, off + readBytes, bytesToRead)
@@ -257,7 +283,7 @@ class BlazeUniffleShuffleReader[K, C](
 
             readBytes += bytesToRead
           }
-
+          total_read += readBytes
           return readBytes
         }
       } else {
@@ -279,7 +305,8 @@ class RssShuffleDataIterWrapper[K, V](
       rssConf) {
 
   override def createKVIterator(data: ByteBuffer): Iterator[Tuple2[AnyRef, AnyRef]] = {
-    val element = Tuple2.apply(1.asInstanceOf[AnyRef], data.asInstanceOf[AnyRef])
+    val len = data.limit() - data.position()
+    val element = Tuple2.apply(len.asInstanceOf[AnyRef], data.asInstanceOf[AnyRef])
     scala.Iterator.single(element)
   }
 }
